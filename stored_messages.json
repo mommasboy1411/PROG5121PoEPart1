@@ -1,0 +1,10 @@
+[
+  {
+    "messageID": "1000000005",
+    "messageNumber": 5,
+    "recipient": "+27838884567",
+    "messageText": "Ok, I am leaving without you.",
+    "messageHash": "10:5:OKYOU",
+    "flag": "Stored"
+  }
+]

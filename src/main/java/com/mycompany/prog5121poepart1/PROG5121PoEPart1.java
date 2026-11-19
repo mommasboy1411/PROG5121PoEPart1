@@ -1,204 +1,390 @@
 package com.mycompany.prog5121poepart1;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Scanner;
 
-/** Main runner: Part 1 registration/login, followed by Part 2 QuickChat. */
+/**
+ * Main QuickChat application integrating Part 1 (Registration & Login),
+ * Part 2 (Message Sending, Validation, Hash, JSON Array Storage), and
+ * Part 3 (Parallel Arrays, Search, Delete by Hash, and Task Reports).
+ *
+ * @author Ntokozo Ntshalintshali (INTSAKALO)
+ */
 public class PROG5121PoEPart1 {
 
-    private static final String VALID_RECIPIENT = "Cell phone number successfully captured.";
-    private static final String VALID_MESSAGE = "Message ready to send.";
-    private static int messageCounter = 0;
-    private static final Path STORED_MESSAGES_FILE = Path.of("quickchat-stored-messages.jsonl");
+    public static final String JSON_FILE_PATH = "stored_messages.json";
+
+    // Part 3 Parallel Arrays (dynamically populated, zero hard-coding)
+    private static String[] sentMessages = new String[0];
+    private static String[] disregardedMessages = new String[0];
+    private static String[] storedMessages = new String[0];
+    private static String[] messageHashes = new String[0];
+    private static String[] messageIDs = new String[0];
+
+    // Parallel metadata arrays to support sender, recipient, and flag lookups
+    private static String[] messageSenders = new String[0];
+    private static String[] messageRecipients = new String[0];
+    private static String[] messageFlags = new String[0];
+
+    private static final List<Message> sessionMessages = new ArrayList<>();
+    private static String currentLoggedInSender = "Developer";
 
     public static void main(String[] args) {
-        try (Scanner scanner = new Scanner(System.in)) {
-            Login loginApp = new Login();
+        Scanner scanner = new Scanner(System.in);
+        Login loginSystem = new Login();
 
-            System.out.println("=== User Registration ===");
-            System.out.print("First name: ");
+        System.out.println("=== QuickChat // INTSAKALO Edition — Registration ===");
+        boolean registered = false;
+        while (!registered) {
+            System.out.print("Enter First Name: ");
             String firstName = scanner.nextLine();
-            System.out.print("Last name: ");
+            System.out.print("Enter Last Name: ");
             String lastName = scanner.nextLine();
+            System.out.print("Enter Username (contains '_' and max 5 chars): ");
+            String username = scanner.nextLine();
+            System.out.print("Enter Password (8+ chars, capital, number, special char): ");
+            String password = scanner.nextLine();
+            System.out.print("Enter Cell Phone Number (+27xxxxxxxxx): ");
+            String cellNumber = scanner.nextLine();
 
-            String username;
-            do {
-                System.out.print("Create username (max 5 characters, include '_'): ");
-                username = scanner.nextLine();
-                if (!loginApp.checkUserName(username)) {
-                    System.out.println("Username is not correctly formatted, please ensure that your username contains an underscore and is no more than 5 characters in length.");
-                }
-            } while (!loginApp.checkUserName(username));
-
-            String password;
-            do {
-                System.out.print("Create password (8+ characters, uppercase, number, special character): ");
-                password = scanner.nextLine();
-                if (!loginApp.checkPasswordComplexity(password)) {
-                    System.out.println("Password is not correctly formatted, please ensure that the password contains at least 8 characters, a capital letter, a number, and a special character.");
-                }
-            } while (!loginApp.checkPasswordComplexity(password));
-
-            String cellNumber;
-            do {
-                System.out.print("Cell number (e.g. +27831234567): ");
-                cellNumber = scanner.nextLine();
-                if (!loginApp.checkCellPhoneNumber(cellNumber)) {
-                    System.out.println("Cell phone number is incorrectly formatted or does not contain the international code (+27).");
-                }
-            } while (!loginApp.checkCellPhoneNumber(cellNumber));
-
-            System.out.println(loginApp.registerUser(username, password, cellNumber, firstName, lastName));
-
-            System.out.println("\n=== Login ===");
-            boolean loggedIn = false;
-            while (!loggedIn) {
-                System.out.print("Username (or 0 to exit): ");
-                String enteredUsername = scanner.nextLine();
-                if (enteredUsername.equals("0")) {
-                    return;
-                }
-                System.out.print("Password: ");
-                String enteredPassword = scanner.nextLine();
-
-                loggedIn = loginApp.loginUser(enteredUsername, enteredPassword);
-                System.out.println(loginApp.returnLoginStatus(loggedIn));
+            String regResult = loginSystem.registerUser(username, password, cellNumber, firstName, lastName);
+            System.out.println(regResult);
+            if (regResult.contains("successfully registered")) {
+                registered = true;
+                currentLoggedInSender = firstName + " " + lastName;
             }
-
-            // The application is NOT accessible before successful authentication.
-            System.out.println("Welcome to QuickChat.");
-            runQuickChat(scanner);
         }
+
+        System.out.println("\n=== QuickChat Login ===");
+        boolean loggedIn = false;
+        while (!loggedIn) {
+            System.out.print("Enter Username: ");
+            String loginUser = scanner.nextLine();
+            System.out.print("Enter Password: ");
+            String loginPass = scanner.nextLine();
+
+            loggedIn = loginSystem.loginUser(loginUser, loginPass);
+            System.out.println(loginSystem.returnLoginStatus(loggedIn));
+        }
+
+        // Load previously stored JSON messages into the arrays on startup
+        loadStoredJsonIntoSession();
+        rebuildParallelArrays();
+
+        System.out.println("\nWelcome to QuickChat.");
+        runMainMenu(scanner);
+        scanner.close();
     }
 
-    private static void runQuickChat(Scanner scanner) {
-        while (true) {
-            System.out.println("\n1) Send Messages");
+    public static void runMainMenu(Scanner scanner) {
+        boolean running = true;
+        while (running) {
+            System.out.println("\nPlease select an option:");
+            System.out.println("1) Send Messages");
             System.out.println("2) Show recently sent messages");
             System.out.println("3) Quit");
+            System.out.println("4) Stored Messages & Reports");
+            System.out.print("Choice: ");
 
-            int choice = readNumber(scanner, "Choose an option: ", 1, 3);
+            int choice = readInt(scanner);
             switch (choice) {
                 case 1:
-                    enterMessages(scanner);
+                    handleSendMessages(scanner);
                     break;
                 case 2:
-                    System.out.println("Coming Soon.");
+                    System.out.println(displaySentMessagesReport());
                     break;
                 case 3:
-                    System.out.println("Goodbye.");
-                    return;
-                default:
-                    // readNumber ensures this cannot happen.
+                    System.out.println("Total number of messages sent: " + Message.returnTotalMessages());
+                    System.out.println("Exiting QuickChat. Goodbye!");
+                    running = false;
                     break;
+                case 4:
+                    handleStoredMessagesSubMenu(scanner);
+                    break;
+                default:
+                    System.out.println("Invalid option. Please choose 1, 2, 3, or 4.");
             }
         }
     }
 
-    private static void enterMessages(Scanner scanner) {
-        int total = readNumber(scanner, "How many messages do you wish to enter? ", 1, Integer.MAX_VALUE);
+    private static void handleSendMessages(Scanner scanner) {
+        System.out.print("How many messages do you wish to enter? ");
+        int count = readInt(scanner);
 
-        for (int messageCount = 0; messageCount < total; messageCount++) {
-            System.out.println("\nMessage " + (messageCount + 1) + " of " + total);
+        for (int i = 0; i < count; i++) {
+            System.out.println("\n--- Message " + (i + 1) + " of " + count + " ---");
 
-            Message message = new Message();
             String recipient;
-            do {
-                System.out.print("Recipient cell number: ");
+            Message tempValidator;
+            while (true) {
+                System.out.print("Enter Recipient Cell Number (+27xxxxxxxxx): ");
                 recipient = scanner.nextLine();
-                String result = message.checkRecipientCell(recipient);
-                System.out.println(result);
-            } while (!VALID_RECIPIENT.equals(message.checkRecipientCell(recipient)));
+                tempValidator = new Message(i + 1, recipient, "", "Pending");
+                if (tempValidator.checkRecipientCell() == 1) {
+                    System.out.println("Cell phone number successfully captured.");
+                    break;
+                } else {
+                    System.out.println("Cell phone number is incorrectly formatted or does not contain an international code. Please correct the number and try again.");
+                }
+            }
 
             String text;
-            do {
-                System.out.print("Message text: ");
+            while (true) {
+                System.out.print("Enter Message (max 250 characters): ");
                 text = scanner.nextLine();
-                String result = message.checkMessageLength(text);
-                System.out.println(result);
-            } while (!VALID_MESSAGE.equals(message.checkMessageLength(text)));
-
-            // Use one message object, with a zero-based running count.
-            message.setRecipientCell(recipient);
-            message.setMessageText(text);
-            message.createMessageHash(messageCounter++);
-
-            System.out.println("1) Send Message");
-            System.out.println("2) Disregard Message");
-            System.out.println("3) Store Message to send later");
-            int action = readNumber(scanner, "Choose message action: ", 1, 3);
-
-            if (action == 2) {
-                System.out.println(message.SentMessage(2));
-                while (!scanner.nextLine().trim().equals("0")) {
-                    System.out.println("Press 0 to delete the message.");
+                String lenStatus = tempValidator.checkMessageLength(text);
+                System.out.println(lenStatus);
+                if (lenStatus.equals("Message ready to send.")) {
+                    break;
                 }
-                continue; // Disregarded messages are never sent or stored.
             }
 
-            if (action == 3) {
-                try {
-                    saveStoredMessage(message);
-                    System.out.println(message.SentMessage(3));
-                    System.out.println(message.printMessages());
-                } catch (IOException ex) {
-                    System.out.println("Unable to store the message: " + ex.getMessage());
+            Message msg = new Message(sessionMessages.size() + 1, recipient, text, "Pending");
+
+            System.out.println("Choose action: 1) Send Message  2) Disregard Message  3) Store Message");
+            int action = readInt(scanner);
+            String actionResponse = msg.sentMessage(action);
+            System.out.println(actionResponse);
+
+            if (action == 1 || action == 2 || action == 3) {
+                sessionMessages.add(msg);
+                if (action == 3) {
+                    saveAllStoredMessagesToJson();
                 }
-            } else {
-                System.out.println(message.SentMessage(1));
-                System.out.println(message.printMessages());
+                rebuildParallelArrays();
             }
+
+            if (action == 1) {
+                System.out.println(msg.printMessages());
+            }
+        }
+
+        System.out.println("\nTotal number of messages sent: " + Message.returnTotalMessages());
+    }
+
+    private static void handleStoredMessagesSubMenu(Scanner scanner) {
+        System.out.println("\n--- Stored Messages & Reports Menu ---");
+        System.out.println("a) Display sender and recipient of all sent/stored messages");
+        System.out.println("b) Display the longest message");
+        System.out.println("c) Search for a message ID and display corresponding recipient and message");
+        System.out.println("d) Search for all messages sent or stored for a particular recipient");
+        System.out.println("e) Delete a message using the message hash");
+        System.out.println("f) Display a report that lists the full details of all sent messages");
+        System.out.print("Select sub-option (a-f): ");
+
+        String sub = scanner.nextLine().trim().toLowerCase();
+        switch (sub) {
+            case "a":
+                System.out.println(displaySendersAndRecipients());
+                break;
+            case "b":
+                System.out.println(displayLongestMessage());
+                break;
+            case "c":
+                System.out.print("Enter Message ID to search: ");
+                String id = scanner.nextLine().trim();
+                System.out.println(searchByMessageID(id));
+                break;
+            case "d":
+                System.out.print("Enter Recipient number to search: ");
+                String rec = scanner.nextLine().trim();
+                System.out.println(searchByRecipient(rec));
+                break;
+            case "e":
+                System.out.print("Enter Message Hash to delete: ");
+                String hash = scanner.nextLine().trim();
+                System.out.println(deleteMessageByHash(hash));
+                break;
+            case "f":
+                System.out.println(displaySentMessagesReport());
+                break;
+            default:
+                System.out.println("Invalid sub-option.");
         }
     }
 
-    private static int readNumber(Scanner scanner, String prompt, int min, int max) {
+    /**
+     * Dynamically populates all Part 3 parallel arrays from active and JSON-loaded messages.
+     */
+    public static void rebuildParallelArrays() {
+        List<String> sentList = new ArrayList<>();
+        List<String> disregardList = new ArrayList<>();
+        List<String> storedList = new ArrayList<>();
+        List<String> hashList = new ArrayList<>();
+        List<String> idList = new ArrayList<>();
+        List<String> senderList = new ArrayList<>();
+        List<String> recipientList = new ArrayList<>();
+        List<String> flagList = new ArrayList<>();
+
+        for (Message m : sessionMessages) {
+            String f = m.getFlag() == null ? "" : m.getFlag();
+            if (f.equalsIgnoreCase("Sent")) {
+                sentList.add(m.getMessageText());
+            } else if (f.equalsIgnoreCase("Disregard")) {
+                disregardList.add(m.getMessageText());
+            } else if (f.equalsIgnoreCase("Stored")) {
+                storedList.add(m.getMessageText());
+            }
+
+            hashList.add(m.getMessageHash());
+            idList.add(m.getMessageID());
+            senderList.add(currentLoggedInSender);
+            recipientList.add(m.getRecipient());
+            flagList.add(f);
+        }
+
+        sentMessages = sentList.toArray(new String[0]);
+        disregardedMessages = disregardList.toArray(new String[0]);
+        storedMessages = storedList.toArray(new String[0]);
+        messageHashes = hashList.toArray(new String[0]);
+        messageIDs = idList.toArray(new String[0]);
+        messageSenders = senderList.toArray(new String[0]);
+        messageRecipients = recipientList.toArray(new String[0]);
+        messageFlags = flagList.toArray(new String[0]);
+    }
+
+    public static void loadStoredJsonIntoSession() {
+        try {
+            List<Message> fromFile = Message.loadMessagesFromJsonArray(JSON_FILE_PATH);
+            sessionMessages.addAll(fromFile);
+        } catch (IOException e) {
+            System.out.println("Note: No existing JSON message archive found.");
+        }
+    }
+
+    public static void saveAllStoredMessagesToJson() {
+        List<Message> toSave = new ArrayList<>();
+        for (Message m : sessionMessages) {
+            if ("Stored".equalsIgnoreCase(m.getFlag())) {
+                toSave.add(m);
+            }
+        }
+        try {
+            Message.saveMessagesToJsonArray(toSave, JSON_FILE_PATH);
+        } catch (IOException e) {
+            System.out.println("Error saving JSON file: " + e.getMessage());
+        }
+    }
+
+    // 2a: Display sender and recipient of all messages
+    public static String displaySendersAndRecipients() {
+        if (messageRecipients.length == 0) {
+            return "No messages available.";
+        }
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < messageRecipients.length; i++) {
+            sb.append("Sender: ").append(messageSenders[i])
+              .append(" | Recipient: ").append(messageRecipients[i])
+              .append(" (").append(messageFlags[i]).append(")\n");
+        }
+        return sb.toString().trim();
+    }
+
+    // 2b: Display the longest message across Sent and Stored messages
+    public static String displayLongestMessage() {
+        String longest = "";
+        for (Message m : sessionMessages) {
+            if (("Sent".equalsIgnoreCase(m.getFlag()) || "Stored".equalsIgnoreCase(m.getFlag()))
+                    && m.getMessageText() != null
+                    && m.getMessageText().length() > longest.length()) {
+                longest = m.getMessageText();
+            }
+        }
+        return longest;
+    }
+
+    // 2c: Search for a Message ID and return corresponding recipient and message
+    public static String searchByMessageID(String searchID) {
+        for (int i = 0; i < messageIDs.length; i++) {
+            if (messageIDs[i] != null && messageIDs[i].equals(searchID)) {
+                Message m = sessionMessages.get(i);
+                return "Recipient: " + m.getRecipient() + "\nMessage: " + m.getMessageText();
+            }
+        }
+        return "Message ID not found.";
+    }
+
+    // 2d: Search all messages sent or stored regarding a particular recipient
+    public static List<String> searchByRecipientList(String recipientNumber) {
+        List<String> matches = new ArrayList<>();
+        for (int i = 0; i < messageRecipients.length; i++) {
+            if (messageRecipients[i] != null && messageRecipients[i].equals(recipientNumber)
+                    && ("Sent".equalsIgnoreCase(messageFlags[i]) || "Stored".equalsIgnoreCase(messageFlags[i]))) {
+                matches.add(sessionMessages.get(i).getMessageText());
+            }
+        }
+        return matches;
+    }
+
+    public static String searchByRecipient(String recipientNumber) {
+        List<String> matches = searchByRecipientList(recipientNumber);
+        if (matches.isEmpty()) {
+            return "No messages found for recipient: " + recipientNumber;
+        }
+        return String.join("\n", matches);
+    }
+
+    // 2e: Delete a message using the Message Hash
+    public static String deleteMessageByHash(String targetHash) {
+        for (int i = 0; i < messageHashes.length; i++) {
+            if (messageHashes[i] != null && messageHashes[i].equalsIgnoreCase(targetHash)) {
+                String deletedText = sessionMessages.get(i).getMessageText();
+                sessionMessages.remove(i);
+                saveAllStoredMessagesToJson();
+                rebuildParallelArrays();
+                return "Message \"" + deletedText + "\" successfully deleted.";
+            }
+        }
+        return "Message hash not found.";
+    }
+
+    // 2f: Display report showing Message Hash, Recipient, and Message for all Sent messages
+    public static String displaySentMessagesReport() {
+        StringBuilder report = new StringBuilder();
+        boolean found = false;
+        for (Message m : sessionMessages) {
+            if ("Sent".equalsIgnoreCase(m.getFlag())) {
+                found = true;
+                report.append("Message Hash: ").append(m.getMessageHash()).append("\n")
+                      .append("Recipient: ").append(m.getRecipient()).append("\n")
+                      .append("Message: ").append(m.getMessageText()).append("\n\n");
+            }
+        }
+        if (!found) {
+            return "No sent messages to display.";
+        }
+        return report.toString().trim();
+    }
+
+    // Helpers for JUnit 5 testing
+    public static void clearSessionData() {
+        sessionMessages.clear();
+        Message.resetTotalMessages();
+        rebuildParallelArrays();
+    }
+
+    public static void addMessageToSession(Message m) {
+        sessionMessages.add(m);
+        rebuildParallelArrays();
+    }
+
+    public static String[] getSentMessagesArray() { return sentMessages; }
+    public static String[] getDisregardedMessagesArray() { return disregardedMessages; }
+    public static String[] getStoredMessagesArray() { return storedMessages; }
+    public static String[] getMessageHashesArray() { return messageHashes; }
+    public static String[] getMessageIDsArray() { return messageIDs; }
+
+    private static int readInt(Scanner scanner) {
         while (true) {
-            System.out.print(prompt);
             String input = scanner.nextLine().trim();
             try {
-                int value = Integer.parseInt(input);
-                if (value >= min && value <= max) {
-                    return value;
-                }
-            } catch (NumberFormatException ignored) {
-                // Ask again for a valid menu number.
-            }
-            System.out.println("Please enter a whole number between " + min + " and " + max + ".");
-        }
-    }
-
-    /** Stores each deferred message as a JSON object on its own line. */
-    private static void saveStoredMessage(Message message) throws IOException {
-        String json = "{\"messageID\":\"" + escapeJson(message.getMessageID())
-                + "\",\"messageHash\":\"" + escapeJson(message.getMessageHash())
-                + "\",\"recipient\":\"" + escapeJson(message.getRecipientCell())
-                + "\",\"messageText\":\"" + escapeJson(message.getMessageText()) + "\"}"
-                + System.lineSeparator();
-        Files.writeString(STORED_MESSAGES_FILE, json, StandardCharsets.UTF_8,
-                StandardOpenOption.CREATE, StandardOpenOption.APPEND);
-    }
-
-    private static String escapeJson(String text) {
-        StringBuilder result = new StringBuilder();
-        for (char ch : text.toCharArray()) {
-            switch (ch) {
-                case '\\': result.append("\\\\"); break;
-                case '"': result.append("\\\""); break;
-                case '\n': result.append("\\n"); break;
-                case '\r': result.append("\\r"); break;
-                case '\t': result.append("\\t"); break;
-                default:
-                    if (ch < 0x20) {
-                        result.append(String.format("\\u%04x", (int) ch));
-                    } else {
-                        result.append(ch);
-                    }
+                return Integer.parseInt(input);
+            } catch (NumberFormatException e) {
+                System.out.print("Please enter a valid number: ");
             }
         }
-        return result.toString();
     }
 }
